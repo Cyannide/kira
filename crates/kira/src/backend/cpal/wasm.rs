@@ -40,11 +40,21 @@ impl Backend for CpalBackend {
 			host.default_output_device()
 				.ok_or(Error::NoDefaultOutputDevice)?
 		};
-		let config = if let Some(config) = settings.config {
+		let mut config = if let Some(config) = settings.config {
 			config
 		} else {
 			device.default_output_config()?.config()
 		};
+		// SHURLEY PATCH: cpal's webaudio backend defaults to 2048 frames
+		// (~46ms) and schedules refills from the BROWSER MAIN THREAD -- the
+		// same thread the whole single-threaded wasm app runs on, so any
+		// long frame (texture upload, pdfium render) starves the buffer and
+		// crackles. 4096 (~93ms) buys headroom; playback-position reads
+		// quantize to the buffer, so don't push this higher without checking
+		// word-highlight sync in the players.
+		if matches!(config.buffer_size, cpal::BufferSize::Default) {
+			config.buffer_size = cpal::BufferSize::Fixed(4096);
+		}
 		let sample_rate = config.sample_rate;
 		Ok((
 			Self {
