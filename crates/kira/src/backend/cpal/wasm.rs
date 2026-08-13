@@ -49,9 +49,16 @@ impl Backend for CpalBackend {
 		// (~46ms) and schedules refills from the BROWSER MAIN THREAD -- the
 		// same thread the whole single-threaded wasm app runs on, so any
 		// long frame (texture upload, pdfium render) starves the buffer and
-		// crackles. 4096 (~93ms) buys headroom; playback-position reads
-		// quantize to the buffer, so don't push this higher without checking
-		// word-highlight sync in the players.
+		// crackles. 4096 (~85ms at 48k) buys headroom.
+		//
+		// DO NOT RAISE THIS without also raising media's END_EPSILON. Playback
+		// position only updates per chunk and this host schedules a chunk ahead,
+		// so the last sample before a clip stops can sit up to TWO chunks short
+		// of its declared duration. media advances a playlist on
+		// `Stopped && current_time >= end - END_EPSILON` (0.25s), so 8192
+		// (170-341ms short) silently stopped SEDA advancing at every clip
+		// change. 4096 stays inside the epsilon. Word-highlight sync reads the
+		// same position, so it pays for depth here too.
 		if matches!(config.buffer_size, cpal::BufferSize::Default) {
 			config.buffer_size = cpal::BufferSize::Fixed(4096);
 		}
